@@ -61,6 +61,8 @@ init(OptList) when is_list(OptList) ->
     %% MAC = md5 | OTP < 22 cmac/aes_128cbc | OTP >= 22 mac/{cmac,aes_128_cbc}
     %% use apply/3
 
+    %% 
+
     {ok}.
 
 %% handle_call/3
@@ -153,13 +155,103 @@ poll_update(N) ->
 
 %%Sockets: recv_packet / xmit_packet: do the task
 
-gettime() -> 
+mobilize(src,dst,ver,mode,keyid,flags) ->
+    %% zeroed ; otherwise values; poll = POLL_MIN?? or default?
+    ok.
+
+find_assoc(RxPacket) ->
+    %% Find peer by Rx->IP and Rx->mode
+    ok.
+
+rstclock(State, Offset, T) ->
+    %%c.state = state; c.last,offset = offset; s.t = t
+    ok.
+
+gettime() -> %%ntp_time() :)
     Time = (erlang:system_time() + ?OFFSET_1900) / 1000000000,
     
     High = floor(Time),
     Low = round((Time - High) * ?MAX_LONG),
 
-    io:format("~p ~p ~p~n",[High, Time, Low]),
-
     <<High:32/integer-unsigned, Low:32/integer-unsigned>>.
 
+%% PACKETS===========
+%% 
+%% R = { IPSrc, IPDst, NTP_hdr, 3ts, keyid, mac, ts}
+%% X = { IPSrc, IPDst, NTP_hdr, 3ts, keyid, mac}
+
+%% ASSOCIATION ==============
+%% F /*Filter*/ = {t, fOffset, fDelay, fDisp} //t = ts
+%% 
+%% P /*peer*/ = {
+%%      /configs on init
+%%      IPSrc. IPDst, version, hmode (host), keyid, flags 
+%%      /set by RxPacket
+%%      ntp_hdr
+%%      3ts /begin clear block
+%%      /computed
+%%      t, f[n], ofset, delay, disp, jitter
+%%      /poll data
+%%      hpoll, burst, reach, ttl
+%%      unreach /end clear block
+%%      outdate, nextdate / lastor next poll times; latter Erlang timer ref
+
+%% System S = {
+%%      t //timestamp
+%%      ntp_hdr
+%%      struct m //list of {pptr, 1|0|-1, float edge}   %%intersection
+%%      struct v //list of {pptr, float metric}         %%cluster
+%%      pptr
+%%      float offset, jitter //combined
+%%      flags, n               //options, survivors}
+
+%% CLOCK ================
+%%  C /*clock*/ = {
+%%      t   /updated
+%%      offset  /current
+%%      last    /previous
+%%      count   /jiggle count
+%%      freq, jitter    /?,RMSjitter
+%%      wander}     /RMS wander
+
+%% INIT==========
+%% S(0) -> init leap, strat; poll = min prec = find_prec
+%% C(0) -> jitter = float val LOG2(s.prec)
+%% mobilize assoc
+%% while 0???? {recv_packet; r->dst = gettime(); receive(r)}
+
+
+%% receive()!!!!!
+%% 
+%% is IP allowed? (opt) Proceed/Return
+%% checks ->
+%%      version > my version
+%%      packet  length. mac length, ext lengths
+%% has_mac ->
+%%      0 ->auth = none
+%%      4 -> auth = crypto_nak
+%%      _ -> md5(r->keyid) ????  =:= r->mac
+%% 
+%% p = find_assoc(r)
+%% lookup dispatch table based on p->hmode, r->mode
+%%      FXMIT: return or fast_xmit(...)
+%%      MANY: mobilize manycast client eph assoc
+%%      NEWPS: New symmetric passive - fast_xmit / mobilize / return
+%%      NEWBC: return / mobilize
+%%      DSCD: return
+%%      PROC: 
+%%          Timestamp checks... auth checks...
+%%          packet(p,r)
+
+%% packet(p,r) !!!!!!!
+%% 
+%% Some stuff
+%% poll_update(p,p->hpoll)
+%% clock_filter(p,offset,delay,disp)
+
+%% clock_filter(...)
+%% 
+%% Some stuff
+%% clock_select()
+
+%%CALCULUS TIME!!!! :D

@@ -1,8 +1,8 @@
--define(MAX_SHORT, 65536).
--define(MAX_LONG, 4294967296).
+-define(MAX_SHORT, 65535).
+-define(MAX_LONG, 4294967295).
 
 -define(NTP_PORT, 123).
--define(NTP_VERSION), 4).
+-define(NTP_VERSION, 4).
 
 -define(STRATUM_DEFAULT, 15).
 -define(STRATUM_MAX, 16).

@@ -1,7 +1,10 @@
 -module(ntp).
 -behaviour(gen_server).
 
--compile({inline,[get_time/0, get_time/1, get_offset/0, get_offset/1]}).
+-include("../include/ntp.hrl").
+
+-compile(export_all).
+-compile(inline).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([start_link/0, start_link/1]).
@@ -15,14 +18,20 @@
 get_time() -> get_time(nanosecond).
 
 get_time(Unit) when is_atom(Unit) ->
-    gen_server:call(?MODULE, {get_time, Unit});
+    Before = erlang:monotonic_time(nanosecond),
+
+    {Time, Precision} = gen_server:call(?MODULE, get_time),
+    After = erlang:monotonic_time(nanosecond),
+
+    convert(Time + (Precision * 3) + (After - Before), Unit);
 get_time(_) ->
     {error, badarg}.
 
 get_offset() -> get_offset(nanosecond).
 
 get_offset(Unit) when is_atom(Unit)->
-    gen_server:call(?MODULE, {get_offset, Unit});
+    {Time, Precision} = gen_server:call(?MODULE, get_offset),
+    convert(Time + Precision, Unit);
 get_offset(_) ->
     {error, badarg}.
 
@@ -43,15 +52,21 @@ start_link(Args) ->
 %% init/1
 %% ====================================================================
 init(OptList) when is_list(OptList) ->
+    application:start(crypto),
+
+    RefID = proplists:get_value(refId, OptList, 
+                                refid(util:ip_to_binary(util:get_ipv4()))),
+    Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
+
     {ok}.
 
 %% handle_call/3
 %% ====================================================================
-handle_call({get_offset, Unit}, _, State) ->
-    {reply, convert(Time, Unit), State};
-handle_call({get_time, Unit}, _, State) ->
-    {reply, convert(Time, Unit), State};
-handle_call({_,_,State}) ->
+handle_call(get_offset, _, State) ->
+    {reply, ok, State};
+handle_call(get_time, _, State) ->
+    {reply, ok, State};
+handle_call(_,_,State) ->
     {reply, {error, badarg}, State}.
 
 
@@ -78,11 +93,43 @@ code_change(_, State, _) ->
 %% ====================================================================
 
 convert(Time, Unit) ->
-    case Time of
-		nanosecond -> (I * 100 -?OFFSET_1582); 
-		microsecond -> (I * 100 -?OFFSET_1582) div 1000; 
-		millisecond -> (I * 100 -?OFFSET_1582) div 1000000; 
-		second ->  (I * 100 -?OFFSET_1582) div 1000000000;
-		seconds ->  (I * 100 -?OFFSET_1582) div 1000000000;
+    case Unit of
+		nanosecond ->  Time; 
+		microsecond -> Time div 1000; 
+		millisecond -> Time div 1000000; 
+		second ->      Time div 1000000000;
+		seconds ->     Time div 1000000000;
 		_ ->	{error, badarg}
-	end;
+	end.
+
+
+-define(RANGE(A,B,C),(A >= B andalso A =< C)).
+
+refid(<<_:4/binary>> = IP) -> IP;
+refid(<<_:16/binary>> = IP) ->
+     <<Return:4/binary, _:12/binary>> = crypto:hash(md5, IP),
+    Return.
+
+
+find_precision(N) ->
+    [H|T] = sample_clock(N, []),
+
+    {_, Diff} = lists:foldl(fun(E, {P, In}) -> {E, [P-E | In]} end, {H, []}, T),
+    Mean = mathx:mean(mathx:cull(Diff,2)),
+    
+    bitshift_prec(?MAX_LONG, 0, Mean).
+
+
+bitshift_prec(Error, SHL, Mean) ->
+    NewErr = abs(1000000000/(1 bsl SHL) - Mean),
+    if
+        NewErr =< Error ->
+            bitshift_prec(NewErr, SHL + 1, Mean);
+        true ->
+            -SHL
+    end.
+
+
+sample_clock(0, Out) -> Out;
+sample_clock(N, In) ->
+    sample_clock(N-1, [erlang:monotonic_time() | In]).

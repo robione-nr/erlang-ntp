@@ -58,6 +58,9 @@ init(OptList) when is_list(OptList) ->
                                 refid(util:ip_to_binary(util:get_ipv4()))),
     Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
 
+    %% MAC = md5 | OTP < 22 cmac/aes_128cbc | OTP >= 22 mac/{cmac,aes_128_cbc}
+    %% use apply/3
+
     {ok}.
 
 %% handle_call/3
@@ -105,11 +108,15 @@ convert(Time, Unit) ->
 
 -define(RANGE(A,B,C),(A >= B andalso A =< C)).
 
+%% Determine the node ID
+
 refid(<<_:4/binary>> = IP) -> IP;
 refid(<<_:16/binary>> = IP) ->
      <<Return:4/binary, _:12/binary>> = crypto:hash(md5, IP),
     Return.
 
+
+%% Function(s) to determine precision of local clock
 
 find_precision(N) ->
     [H|T] = sample_clock(N, []),
@@ -133,3 +140,26 @@ bitshift_prec(Error, SHL, Mean) ->
 sample_clock(0, Out) -> Out;
 sample_clock(N, In) ->
     sample_clock(N-1, [erlang:monotonic_time() | In]).
+
+%% Test Zone
+
+poll_update(N) ->
+    Poll = max(min(?POLL_MAX,N),?POLL_MIN).
+
+%% === "Kernel"
+%% Erlang: Do nothing (store offset if different beforehand)
+%% adjust_time(offset)
+%% set_time(offset)
+
+%%Sockets: recv_packet / xmit_packet: do the task
+
+gettime() -> 
+    Time = (erlang:system_time() + ?OFFSET_1900) / 1000000000,
+    
+    High = floor(Time),
+    Low = round((Time - High) * ?MAX_LONG),
+
+    io:format("~p ~p ~p~n",[High, Time, Low]),
+
+    <<High:32/integer-unsigned, Low:32/integer-unsigned>>.
+

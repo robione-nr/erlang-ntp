@@ -1,4 +1,5 @@
 ebin/
 .project
-.git/
+.git*
 .settings/
+src/*.beam

@@ -30,11 +30,20 @@ get_time() ->
 get_offset() ->
     ok.
 
-add_peer(_) ->
-    ok.
+add_peer(HostName) ->
+    case Ret = inet:gethostbyname(HostName) of
+        {hostent, _, _, Family, _, IPaddrs} ->
+               lists:foreach(fun(IP) ->
+                                {ok, _} = supervisor:start_child(ntp_peer_supervisor, [IP, Family])
+                                end
+                            , IPaddrs);
+        {error, _} -> Ret
+    end.
 
-drop_peer(_) ->
-    ok.
+drop_peer(HostName) ->
+    gen_server:cast(ntp_sysproc, {drop_peer, HostName}).
 
-peer_info(_) ->
-    ok.
+peer_info(HostName) ->
+    P = gen_server:call(ntp_sysproc, {peer_info, HostName}),
+    {_, Ret} = gen_server:call(P, {get_vars, all}),
+    Ret.

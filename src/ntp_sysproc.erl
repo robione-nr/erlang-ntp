@@ -1,4 +1,4 @@
--module(ntp).
+-module(ntp_sysproc).
 -behaviour(gen_server).
 
 -include("../include/ntp.hrl").
@@ -9,31 +9,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([start_link/0, start_link/1]).
 
-
-%% ====================================================================
-%% API functions
-%% ====================================================================
--export([get_time/0, get_time/1, get_offset/0, get_offset/1]).
-
-get_time() -> get_time(nanosecond).
-
-get_time(Unit) when is_atom(Unit) ->
-    Before = erlang:monotonic_time(nanosecond),
-
-    {Time, Precision} = gen_server:call(?MODULE, get_time),
-    After = erlang:monotonic_time(nanosecond),
-
-    convert(Time + (Precision * 3) + (After - Before), Unit);
-get_time(_) ->
-    {error, badarg}.
-
-get_offset() -> get_offset(nanosecond).
-
-get_offset(Unit) when is_atom(Unit)->
-    {Time, Precision} = gen_server:call(?MODULE, get_offset),
-    convert(Time + Precision, Unit);
-get_offset(_) ->
-    {error, badarg}.
 
 %% ====================================================================
 %% Behavioural functions
@@ -53,9 +28,10 @@ start_link(Args) ->
 %% ====================================================================
 init(OptList) when is_list(OptList) ->
     application:start(crypto),
+    
 
     RefID = proplists:get_value(refId, OptList, 
-                                refid(util:ip_to_binary(util:get_ipv4()))),
+                                refid(iface:to_binary(iface:get_ipv4()))),
     Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
 
     %% MAC = md5 | OTP < 22 cmac/aes_128cbc | OTP >= 22 mac/{cmac,aes_128_cbc}
@@ -63,7 +39,7 @@ init(OptList) when is_list(OptList) ->
 
     %% 
 
-    {ok}.
+    {ok,{}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -87,6 +63,7 @@ handle_info(_, State) ->
     {noreply, State}.
 
 terminate(_, _) ->
+    %%clean iptables
     ok.
 
 code_change(_, State, _) ->
@@ -96,17 +73,6 @@ code_change(_, State, _) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-convert(Time, Unit) ->
-    case Unit of
-		nanosecond ->  Time; 
-		microsecond -> Time div 1000; 
-		millisecond -> Time div 1000000; 
-		second ->      Time div 1000000000;
-		seconds ->     Time div 1000000000;
-		_ ->	{error, badarg}
-	end.
-
 
 -define(RANGE(A,B,C),(A >= B andalso A =< C)).
 

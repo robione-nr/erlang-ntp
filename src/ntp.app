@@ -1,9 +1,10 @@
 {application, ntp, [
 	{description,"Erlang-based NTP Server"},
-	{vsn,"0.1.0"},
+	{vsn,"0.0.2"},
 
 	%List of modules added by this application
-	{modules, [ntp, ntp_supervisor, ntp_sysproc, ntp_peer_supervisor, ntp_peer, ntp_clkproc]},
+	{modules, [ntp, ntp_supervisor, ntp_sysproc, ntp_peer_supervisor,
+               ntp_peer, ntp_socket, ntp_clkproc]},
 
 	%List of registered atoms by modules in application
 	{registered, []},

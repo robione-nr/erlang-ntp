@@ -20,5 +20,5 @@
 
 -define(PHI, 15.0e-6).
 
--define(SERVER_LIST_DEFAULT, ["cronos.cenam.mx","time.esa.int","ntp.nict.jp","atom.uhr.de",
-                              "clock.isc.org","ntp.ix.ru","tick.usask.ca","time.nist.gov"]).
+-define(NTP_SERVER_LIST, ["cronos.cenam.mx","time.esa.int","ntp.nict.jp","atom.uhr.de",
+                          "clock.isc.org","ntp.ix.ru","tick.usask.ca","time.nist.gov"]).

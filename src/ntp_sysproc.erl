@@ -7,18 +7,25 @@
 -compile(inline).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([start_link/0, start_link/1]).
+-export([start_link/1]).
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+-export([get_vars/1, set_vars/1]).
+
+get_vars(List) ->
+    gen_server:call(?MODULE, {get_vars, List}).
+
+set_vars(List) ->
+    gen_server:cast(?MODULE, {set_vars, List}).
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
 
-start_link() ->
-	start_link([]).
-
-start_link(Args) ->
-	gen_server:start_link({local, ?MODULE}, ?MODULE, Args, []).
+start_link(OptList) ->
+	gen_server:start_link({local, ?MODULE}, ?MODULE, OptList, []).
 
 %% ====================================================================
 %% Framework Functions
@@ -29,42 +36,97 @@ start_link(Args) ->
 init(OptList) when is_list(OptList) ->
     application:start(crypto),
     
-
-    RefID = proplists:get_value(refId, OptList, 
+    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
+    Password = proplists:get_value(sudo, OptList),
+    RefID = proplists:get_value(ref_id, OptList), 
                                 refid(iface:to_binary(iface:get_ipv4()))),
     Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
+    Port = proplists:get_value(port, OptList, ?FW_PORT),
+    Mode = proplists:get_value(mode, OptList, ?MODE_DEFAULT),
 
-    %% MAC = md5 | OTP < 22 cmac/aes_128cbc | OTP >= 22 mac/{cmac,aes_128_cbc}
-    %% use apply/3
+    case {Password, Mode} of 
+        {undefined, Mode} when Mode =/= client ->
+            logger:log(notice, "No sudo password supplied. Cannot access port 123.\nRunning as client-only.");
+        _ -> continue
+    end,
 
-    %% 
-
-    {ok,{}}.
+    ip_routing(Port, insert_rules),
+    
+    {ok,{#{},Port}}.
 
 %% handle_call/3
 %% ====================================================================
-handle_call(get_offset, _, State) ->
+handle_call({get_vars, Vars},_,State) ->
+    Result = if
+                Vars =:= all -> get();
+                true ->
+                    lists:foldr(fun(VN, In) ->
+                        [get(VN) | In]
+                        end
+                    ,[],Vars)
+            end,
+    {reply, {ok, Result}, State};
+
+handle_call(get_time,_,State) ->
     {reply, ok, State};
-handle_call(get_time, _, State) ->
+
+handle_call(get_offset,_,State) ->
     {reply, ok, State};
+
+handle_call({peer_pid, Host}, _, {Map, _} = State) ->
+    {reply, maps:get(Host, Map, {error, no_connection}), State};
+
 handle_call(_,_,State) ->
     {reply, {error, badarg}, State}.
 
 
 %% handle_cast/2
 %% ====================================================================
+handle_cast({set_vars, Vars}, State) ->
+    lists:foldl(fun({K,V}, _) ->
+                    put(K,V)
+                    end
+                , [], Vars),
+    {noreply. State};
+
+handle_cast({add_peer, {Host, IP, Pid}}, {Map , Port}) ->
+    Out = Map#{
+        Pid => {Host, IP},
+        IP => Pid,
+        Host => Pid
+    },
+    {noreply, {Out, Port}};
+
+handle_cast({add_peer, {IP, Pid}}, {Map , Port}) ->
+    Out = Map#{
+        Pid => {undefined, IP},
+        IP => Pid
+    },
+    {noreply, {Out, Port}};
+
+handle_cast({drop_peer, Host}, {Map , Port}) ->
+    Pid = maps:get(Host, Map, undefined),
+    {Host, IP} = maps:get(Pid, Map, undefined),
+
+    Out = maps:without([Pid, IP, Host], Map),
+
+    {noreply, {Out, Port}};
+
 handle_cast(_, State) ->
     {noreply, State}.
+
+
+%% terminate/2
+%% ====================================================================
+terminate(_, {_, Port}) ->
+    ip_routing(Port, delete_rules),
+    ok.
 
 
 %% Placeholders
 %% ====================================================================
 handle_info(_, State) ->
     {noreply, State}.
-
-terminate(_, _) ->
-    %%clean iptables
-    ok.
 
 code_change(_, State, _) ->
     {ok, State}.
@@ -74,7 +136,25 @@ code_change(_, State, _) ->
 %% Internal functions
 %% ====================================================================
 
--define(RANGE(A,B,C),(A >= B andalso A =< C)).
+%% Init/End helpers
+
+ip_routing(Port, Mode) ->
+    StrPort = integer_to_list(Port),
+
+    Action = case Mode of
+        insert_rules -> 
+            os:cmd(lists:flatten(["echo \"" | [Password | 
+                ["\" | sudo -S ip6tables -t nat -I OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]]),
+            os:cmd(lists:flatten(["echo \"" | [Password | 
+                ["\" | sudo -S ip6tables -t nat -I PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]);
+        delete_rules ->
+            os:cmd(lists:flatten(["echo \"" | [Password | 
+                ["\" | sudo -S ip6tables -t nat -D OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]]),
+            os:cmd(lists:flatten(["echo \"" | [Password | 
+                ["\" | sudo -S ip6tables -t nat -D PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]);
+    end, 
+    
+
 
 %% Determine the node ID
 
@@ -140,6 +220,7 @@ gettime() -> %%ntp_time() :)
     Low = round((Time - High) * ?MAX_LONG),
 
     <<High:32/integer-unsigned, Low:32/integer-unsigned>>.
+
 
 %% PACKETS===========
 %% 

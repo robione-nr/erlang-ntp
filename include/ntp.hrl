@@ -4,6 +4,7 @@
 -define(OFFSET_1900, 2208988800000000000).
 
 -define(NTP_PORT, 123).
+-define(FW_PORT, 23123).
 -define(NTP_VERSION, 4).
 
 -define(INIT_LEAP, 3).
@@ -15,6 +16,8 @@
 -define(POLL_MIN, 4).
 -define(POLL_MAX, 17).
 -define(POLL_DEFAULT, 6).
+
+-define(MODE_DEFAULT, client).
 
 -define(CLOCK_SAMPLES,50).
 

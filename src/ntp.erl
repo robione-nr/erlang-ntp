@@ -16,10 +16,8 @@
 
 %% echo pw | sudo -S cmd
 %% iptables / ip6tables
-%% sudo iptables -t nat -I OUTPUT -p tcp -d 127.0.0.1 --dport 123 -j REDIRECT --to-ports 3000
-%% sudo iptables -t nat -I PREROUTING -p tcp --dport 123 -j REDIRECT --to-ports 3000
-%% sudo ip6tables -t nat -I OUTPUT -p tcp -d ::1 --dport 123 -j REDIRECT --to-ports 3000
-%% sudo ip6tables -t nat -I PREROUTING -p tcp --dport 123 -j REDIRECT --to-ports 3000
+
+
 
 
 start() -> start(normal, []).
@@ -44,7 +42,7 @@ get_time(Unit) when is_atom(Unit) ->
 
         convert(Time + (Precision * 3) + (After - Before), Unit)
     catch
-        _:_ -> {error, system_offline}
+        _:_ -> {error, timeout}
     end;
 get_time(_) ->
     {error, badarg}.
@@ -57,28 +55,31 @@ get_offset(Unit) when is_atom(Unit)->
         {Offset, Precision} = gen_server:call(ntp_sysproc, get_offset),
         convert(Offset + Precision, Unit)
     catch
-        _:_ -> {error, system_offline}
+        _:_ -> {error, timeout}
     end;
 get_offset(_) ->
     {error, badarg}.
 
 
-add_peer(HostName) ->
+add_peer(IP) when is_tuple(IP) ->
+    {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
+    gen_server:cast(ntp_sysproc, {add_peer, {IP, Pid}});
+add_peer(HostName) when is_list(HostName) ->
     case Ret = inet:gethostbyname(HostName) of
         {hostent, _, _, _, _, IPaddrs} ->
                lists:foreach(fun(IP) ->
-                                {ok, _} = supervisor:start_child(ntp_peer_supervisor, [IP]),
-                                gen_server:cast(ntp_sysproc, {add_peer, {HostName, IP}})
+                                {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
+                                gen_server:cast(ntp_sysproc, {add_peer, {HostName, IP, Pid}})
                                 end
                             , IPaddrs);
         {error, _} -> Ret
     end.
 
-drop_peer(HostName) ->
-    gen_server:cast(ntp_sysproc, {drop_peer, HostName}).
+drop_peer(Host) ->
+    gen_server:cast(ntp_sysproc, {drop_peer, Host}).
 
-peer_info(HostName) ->
-    P = gen_server:call(ntp_sysproc, {peer_pid, HostName}),
+peer_info(Host) ->
+    P = gen_server:call(ntp_sysproc, {peer_pid, Host}),
     {_, Ret} = gen_server:call(P, {get_vars, all}),
     Ret.
 

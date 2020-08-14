@@ -16,26 +16,24 @@ start_link(OptList) ->
 
 init(OptList) ->
     Port = proplists:get_value(port, OptList, ?NTP_PORT),
-    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
-
 	{ok, { #{strategy => one_for_one}, [
 
         % === System process in RFC reference implementation
 		#{	id => ntp_sysproc,
-			start => {ntp_sysproc, start_link, [Servers]}
+			start => {ntp_sysproc, start_link, [OptList]}
             %% restart => atom      %Default: permanent
-            %% shutdown => n	    %Default: 5000 | infinity
+   	        %% shutdown => n	    %Default: 5000 | infinity
 			%% type => worker,		%DEFAULT
 			%% modules => [...]		%Default: [M]	
 		},
 		
 		% === Clock adjust and discipline process
-    	#{	id => ntp_clkproc,
+   		#{	id => ntp_clkproc,
 			start => {ntp_clkproc, start_link, []}
 		},
 
         % === UDP socket process
-    	#{	id => ntp_socket,
+   		#{	id => ntp_socket,
 			start => {ntp_socket, start_link, [Port]}
 		},
 		

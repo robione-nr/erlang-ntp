@@ -50,6 +50,7 @@ init(OptList) when is_list(OptList) ->
         _ -> continue
     end,
 
+    put(sudo, Password),
     ip_routing(Port, insert_rules),
     
     {ok,{#{},Port}}.
@@ -72,6 +73,12 @@ handle_call(get_time,_,State) ->
 
 handle_call(get_offset,_,State) ->
     {reply, ok, State};
+
+handle_call({access,IP}, _, {Map, _} = State) ->
+    case maps:get(IP, Map, false) of
+        false ->
+            inet:
+    {reply, , State};
 
 handle_call({peer_pid, Host}, _, {Map, _} = State) ->
     {reply, maps:get(Host, Map, {error, no_connection}), State};
@@ -140,6 +147,7 @@ code_change(_, State, _) ->
 
 ip_routing(Port, Mode) ->
     StrPort = integer_to_list(Port),
+    Password = get(sudo),
 
     Action = case Mode of
         insert_rules -> 
@@ -151,7 +159,7 @@ ip_routing(Port, Mode) ->
             os:cmd(lists:flatten(["echo \"" | [Password | 
                 ["\" | sudo -S ip6tables -t nat -D OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]]),
             os:cmd(lists:flatten(["echo \"" | [Password | 
-                ["\" | sudo -S ip6tables -t nat -D PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]);
+                ["\" | sudo -S ip6tables -t nat -D PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]])
     end, 
     
 

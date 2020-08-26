@@ -83,7 +83,7 @@ handle_info({udp, _, IP, _, Data}, Socket) ->
     %% byte_size of 20,22,>22, (Good) <8, Sz%4 (Bad)
     
         <<Leap:2/integer-unsigned, Version:3/integer-unsigned,
-          Mode:3/integer-unsigned, Stratum:8/integer-unsigned,
+          RxMode:3/integer-unsigned, Stratum:8/integer-unsigned,
           Poll:8/integer-unsigned, Precision:8/integer-unsigned,
           RootDelay:4/binary, RootDisp:4/binary, RefId:4/binary,
           RefTS:8/binary, OriTS:8/binary, RxTS:8/binary, TxTS:8/binary>> = Packet,
@@ -95,7 +95,15 @@ handle_info({udp, _, IP, _, Data}, Socket) ->
 
         MapExtMAC = parse_packet(ExtMAC, #{}, #{}),
 
-        
+        case TxMode = ntp_util:mode_to_atom(get(mode)) of
+            undefined -> error(enotrecoverable);
+            true -> continue
+        end,
+
+        case ntp_util:dispatch_policy(TxMode, ntp_util:mode_to_atom(RxMode)) of
+            _ -> continue
+        end
+
     catch
         throw:{Type, Reason} -> 
             StrOut = case Reason of
@@ -106,8 +114,15 @@ handle_info({udp, _, IP, _, Data}, Socket) ->
 
             logger:log(Type, StrOut);
 
+        error:enotrecoverable ->
+            logger:error("Unrecoverable state. No peer mode set.");
+
         Type:Reason ->
-            logger:info("Unhandled exception of type (~p), reason (~p).",[Type,Reason])
+            case {Type, Reason} of
+                {throw, dp_discard} -> continue;
+                _ ->
+                    logger:info("Unhandled exception of type (~p), reason (~p).",[Type,Reason])
+            end
     end,
     {noreply, Socket}.
 
@@ -148,11 +163,15 @@ parse_packet(ExtMAC, State, AccIn) ->
             <<KeyID:4/binary, Digest/binary>> = ExtMAC,
             {AccIn#{keyid => KeyID, digest => Digest}, <<>>};
         Sz > 22 ->
-            ;
+            <<Type:2/binary, Length:2/binary, _/binary>> = ExtMAC,
+            0 = Length rem 4,
+            <<_:4/binary, Field:(Length - 4)/binary, Remainder/binary>> = ExtMAC,
+            {parse_field(Type, Field, AccIn), Remainder};
         (Sz < 8) or ((Sz band 3) =/= 0) ->
             throw({error, malformed_packet});
         true -> throw({error, malformed_packet})
     end,
     parse_packet(Tail, State, AccOut).
 
-
+parse_field(Type, Field, AccIn) ->
+    #{}.

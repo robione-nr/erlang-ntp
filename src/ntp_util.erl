@@ -3,6 +3,7 @@
 -author("Nolan Robidoux").
 
 -export([clock_source/1, kod_string/1]).
+-export([mode_to_atom/1, dispatch_policy/2]).
 
 %% STRATUM == 1 // Reference ID field
 clock_source(Code = <<_:4/binary>>) ->
@@ -49,3 +50,40 @@ kod_string(Code = <<_:4/binary>>) ->
         <<"STEP">> -> "A step change in system time has occurred, but the association has not yet resynchronized.";
         _ -> undefined
     end.
+
+mode_to_atom(Mode) ->
+    maps:get(Mode,
+        #{
+            0 => no_peer,
+            1 => sym_active,
+            2 => sym_passive,
+            3 => client,
+            4 => server,
+            5 => bcast,
+            6 => control,
+            7 => private
+        }, undefined).
+
+
+dispatch_policy(TxMode, RxMode) ->
+    Map = #{
+        {no_peer, sym_active} => dp_newps,
+        {no_peer, client} => dp_fxmit,
+        {no_peer, server} => dp_many,
+        {no_peer, bcast} => dp_newbc,
+
+        {sym_active, sym_active} => dp_proc,
+        {sym_active, sym_passive} => dp_proc,
+
+        {sym_passive, sym_active} => dp_proc,
+        %% {sym_passive, sym_passive} => dp_error,
+
+        %% Reference implemenation ultimately discards.
+        %% Kept for notes.
+
+        {client, server} => dp_proc,
+
+        {control, bcast} => dp_proc
+    },
+
+    maps:get({TxMode, RxMode}, Map, dp_discard).

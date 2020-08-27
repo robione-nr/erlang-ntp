@@ -20,9 +20,9 @@ init([]) ->
 		#{	id => ntp_peer,
 			start => {ntp_peer, start_link, []},
             restart => temporary
-            %% shutdown => n	    %Default: 5000 | infinity
-			%% type => worker,		%DEFAULT
-			%% modules => [...]		%Default: [M]	
+            %% shutdown => n	   %Default: 5000 | infinity
+			%% type => worker,	   %DEFAULT
+			%% modules => [...]	   %Default: [M]	
 		}
 	]}}.
 

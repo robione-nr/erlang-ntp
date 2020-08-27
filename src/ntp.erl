@@ -19,6 +19,10 @@ start() -> start(normal, []).
 start(OptList) -> start(normal, OptList).
 
 start(normal, OptList) ->
+    case proplists:is_defined(crypto, application:loaded_applications()) of
+        false -> application:start(crypto);
+        true -> continue
+    end,
     ntp_supervisor:start_link(OptList).
 
 stop(_) -> ok.

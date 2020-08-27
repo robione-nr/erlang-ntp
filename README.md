@@ -1,12 +1,14 @@
 # Erlang NTP Server
 
+Current State: _**Work in Progress**_
+
 Erlang implementation of reference code in RFC 5905: Appendix A.
 
 I had implemented a small client-only version that was incorporated into a TOTP module for a personal project and wanted to create a full server for use in any application for any purpose. I've seen other small implementations on GitHub similar to what I had done originally. Felt that others may want something more... flexible and flushed out. 
 
 This is a gen_server intended for use in a supervisor tree.
 
-### Dependencies (Included if applciable)
+### Dependencies (Source included if applicable)
 
  - Linux-based OS.
  - [iface](https://github.com/robione-nr/erlang-utils/blob/master/iface.erl): Used to gather NIC information.
@@ -21,7 +23,7 @@ This is a gen_server intended for use in a supervisor tree.
 
  Please note port 123 is priviledged and the application makes attempts to forward port 123 using the shell command `ip6tables`. This requires the `sudo` option be set. This is the only purpose for sudo. If the port is not accessible it will only run in `client` mode.
 
- Start-up Options:
+ Start-up Options: _(subject to change)_
   - {port, _n_}: Port for NTP communication.
   - {mode, _atom_}: Operating mode of applciation. Valid values are - client, server, sym_active, sym_passive, bclient.
   - {sudo, _string_}: Sudo password to attempt port remap.

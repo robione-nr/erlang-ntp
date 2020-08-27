@@ -26,7 +26,6 @@ get_ipv6() -> get_ip(8,[]).
 get_ipv6(IFace) -> get_ip(8, IFace).
 
 
-
 get_mac() -> get_mac([]).
 
 get_mac([]) ->

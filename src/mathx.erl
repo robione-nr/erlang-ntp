@@ -35,7 +35,7 @@ variance(Samples) ->
     {X2/(N-1)-(N*Avg*Avg/(N-1)), Avg}.
 
 stddev(Samples) ->
-    {V, M} = variance(Samples), 
+    {V, M} = variance(Samples),
     {math:sqrt(V), M}.
 
 cull(Samples, NSigma) ->

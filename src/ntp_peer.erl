@@ -5,7 +5,7 @@
 
 -include("../include/ntp.hrl").
 
--export([start_link/0, init/2, handle_call/3, handle_cast/2, 
+-export([start_link/1, init/1, handle_call/3, handle_cast/2, 
          handle_info/2, terminate/2, code_change/3
 ]).
 
@@ -27,8 +27,8 @@ halt(Peer, Reason) -> Peer ! {halt, Reason}.
 %% Behavioural functions
 %% ====================================================================
 
-start_link() ->
-	gen_server:start_link(?MODULE, [], []).
+start_link(IP) ->
+	gen_server:start_link(?MODULE, IP, []).
 
 %% ====================================================================
 %% Framework Functions
@@ -36,7 +36,7 @@ start_link() ->
 
 %% init/1
 %% ====================================================================
-init(HostName, Family) ->
+init(IP) ->
 
     put(pid,self()),
 

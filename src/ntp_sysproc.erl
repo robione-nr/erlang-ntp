@@ -36,13 +36,8 @@ start_link(OptList) ->
 init(OptList) when is_list(OptList) ->
     application:start(crypto),
     
-    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
-    Password = proplists:get_value(sudo, OptList),
-    RefID = proplists:get_value(ref_id, OptList), 
-                                refid(iface:to_binary(iface:get_ipv4()))),
-    Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
-    Port = proplists:get_value(port, OptList, ?FW_PORT),
     Mode = proplists:get_value(mode, OptList, ?MODE_DEFAULT),
+    Password = proplists:get_value(sudo, OptList),
 
     case {Password, Mode} of 
         {undefined, Mode} when Mode =/= client ->
@@ -50,8 +45,24 @@ init(OptList) when is_list(OptList) ->
         _ -> continue
     end,
 
+    RefID = case proplists:get_value(ref_id, OptList) of
+                ipv4 -> refid(iface:to_binary(iface:get_ipv4()));
+                ipv6 -> refid(iface:to_binary(iface:get_ipv6()));
+                {_,_,_,_} -> refid(iface:to_binary(iface:get_ipv4()));
+                {_,_,_,_,_,_,_,_} -> refid(iface:to_binary(iface:get_ipv6()));
+                undefined -> refid(iface:to_binary(iface:get_ipv4()));
+                _ -> error(badarg)
+            end,
+
+    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
+    
+    Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
+    Port = proplists:get_value(port, OptList, ?FW_PORT),
+
+    
+
     put(sudo, Password),
-    ip_routing(Port, insert_rules),
+%   ip_routing(Port, insert_rules),
     
     {ok,{#{},Port}}.
 
@@ -74,14 +85,32 @@ handle_call(get_time,_,State) ->
 handle_call(get_offset,_,State) ->
     {reply, ok, State};
 
-handle_call({access,IP}, _, {Map, _} = State) ->
-    case maps:get(IP, Map, false) of
-        false ->
-            inet:
-    {reply, , State};
+handle_call({add_peer, IP}, _, {Map , Port}) when is_tuple(IP) ->
+    {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
+    monitor(process, Pid),
 
-handle_call({peer_pid, Host}, _, {Map, _} = State) ->
-    {reply, maps:get(Host, Map, {error, no_connection}), State};
+    Out = Map#{
+        Pid => IP,
+        IP => Pid
+    },
+    {reply, Pid, {Out, Port}};
+
+handle_call({add_peer, IPAddrs}, _, {Map , Port}) when is_list(IPAddrs) ->
+    {IP, Pid} =
+        lists:foldl(fun(IP, {I,P}) ->
+            {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
+            monitor(process, Pid),
+            {[{IP, Pid} | I],[{Pid, IP} | P]}
+        end, {[],[]}, IPAddrs),
+
+    Out = maps:merge(
+                Map,
+                maps:merge(
+                    maps:from_list(IP),
+                    maps:from_list(Pid)
+                )),
+
+    {reply, proplists:get_keys(Pid), {Out, Port}};
 
 handle_call(_,_,State) ->
     {reply, {error, badarg}, State}.
@@ -94,47 +123,42 @@ handle_cast({set_vars, Vars}, State) ->
                     put(K,V)
                     end
                 , [], Vars),
-    {noreply. State};
+    {noreply, State};
 
-handle_cast({add_peer, {Host, IP, Pid}}, {Map , Port}) ->
-    Out = Map#{
-        Pid => {Host, IP},
-        IP => Pid,
-        Host => Pid
-    },
-    {noreply, {Out, Port}};
-
-handle_cast({add_peer, {IP, Pid}}, {Map , Port}) ->
-    Out = Map#{
-        Pid => {undefined, IP},
-        IP => Pid
-    },
-    {noreply, {Out, Port}};
-
-handle_cast({drop_peer, Host}, {Map , Port}) ->
-    Pid = maps:get(Host, Map, undefined),
-    {Host, IP} = maps:get(Pid, Map, undefined),
-
-    Out = maps:without([Pid, IP, Host], Map),
-
-    {noreply, {Out, Port}};
+handle_cast({drop_peer, Pid}, {Map , Port}) ->
+    demonitor(Pid),
+    IP = maps:get(Pid, Map, undefined),
+    exit(Pid, shutdown),
+    {noreply, {maps:without([Pid, IP], Map), Port}};
 
 handle_cast(_, State) ->
+    {noreply, State}.
+
+
+%% handle_info/2
+%% ====================================================================
+handle_info({'DOWN', _, process, Pid, _}, {Map, Port}) ->
+    IP = maps:get(Pid, Map, undefined),
+    exit(Pid, shutdown),
+    {noreply, {maps:without([Pid, IP], Map), Port}};
+
+handle_info(state, State) ->
+    io:format("~p~n",[State]),
+    {noreply, State};
+
+handle_info(_, State) ->
     {noreply, State}.
 
 
 %% terminate/2
 %% ====================================================================
 terminate(_, {_, Port}) ->
-    ip_routing(Port, delete_rules),
+%    ip_routing(Port, delete_rules),
     ok.
 
 
 %% Placeholders
 %% ====================================================================
-handle_info(_, State) ->
-    {noreply, State}.
-
 code_change(_, State, _) ->
     {ok, State}.
 
@@ -152,15 +176,15 @@ ip_routing(Port, Mode) ->
     Action = case Mode of
         insert_rules -> 
             os:cmd(lists:flatten(["echo \"" | [Password | 
-                ["\" | sudo -S ip6tables -t nat -I OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]]),
+                ["\" | sudo -S ip6tables -t nat -I OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]])),
             os:cmd(lists:flatten(["echo \"" | [Password | 
-                ["\" | sudo -S ip6tables -t nat -I PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]);
+                ["\" | sudo -S ip6tables -t nat -I PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]));
         delete_rules ->
             os:cmd(lists:flatten(["echo \"" | [Password | 
-                ["\" | sudo -S ip6tables -t nat -D OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]]),
+                ["\" | sudo -S ip6tables -t nat -D OUTPUT -p udp -d ::1 --dport 123 -j REDIRECT --to-ports " | StrPort]]])),
             os:cmd(lists:flatten(["echo \"" | [Password | 
-                ["\" | sudo -S ip6tables -t nat -D PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]])
-    end, 
+                ["\" | sudo -S ip6tables -t nat -D PREROUTING -p udp --dport 123 -j REDIRECT --to-ports " | StrPort]]]))
+    end.
     
 
 

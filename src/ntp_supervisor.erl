@@ -16,6 +16,7 @@ start_link(OptList) ->
 
 init(OptList) ->
     Port = proplists:get_value(port, OptList, ?NTP_PORT),
+
 	{ok, { #{strategy => one_for_one}, [
 
         % === System process in RFC reference implementation

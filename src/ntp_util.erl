@@ -2,7 +2,7 @@
 
 -author("Nolan Robidoux").
 
--export([clock_source/1, kod_string/1]).
+-export([clock_source/1, kod_string/1, is_kod/1]).
 -export([mode_to_atom/1, dispatch_policy/2]).
 
 %% STRATUM == 1 // Reference ID field
@@ -87,3 +87,10 @@ dispatch_policy(TxMode, RxMode) ->
     },
 
     maps:get({TxMode, RxMode}, Map, dp_discard).
+
+is_kod(Packet) ->
+    case Packet of
+        <<3:2/integer-unsigned, _:6/bits, 16:8/integer-unsigned,
+          _:10/binary, RefId:4/binary, _/binary>> -> RefId;
+        _ -> false
+    end.

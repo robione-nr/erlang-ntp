@@ -80,8 +80,6 @@ handle_info({udp, _, IP, _, Data}, Socket) ->
         
         <<Packet:48/binary, ExtMAC/binary>> = Data,
 
-    %% byte_size of 20,22,>22, (Good) <8, Sz%4 (Bad)
-    
         <<Leap:2/integer-unsigned, Version:3/integer-unsigned,
           RxMode:3/integer-unsigned, Stratum:8/integer-unsigned,
           Poll:8/integer-unsigned, Precision:8/integer-unsigned,
@@ -101,6 +99,16 @@ handle_info({udp, _, IP, _, Data}, Socket) ->
         end,
 
         case ntp_util:dispatch_policy(TxMode, ntp_util:mode_to_atom(RxMode)) of
+            dp_proc ->
+                continue;
+            dp_fxmit ->
+                continue;
+            dp_newbc ->
+                continue;
+            dp_newps ->
+                continue;
+            dp_many ->
+                continue;
             _ -> continue
         end
 

@@ -5,22 +5,18 @@
 
 -compile(inline).
 
--export([start/0, start/2, stop/1]).
+-export([start/0, start/1, start/2, stop/1]).
 
 -export([get_time/0, get_time/1, get_offset/0, get_offset/1]).
--export([add_peer/1, peer_info/1, drop_peer/1]).
+-export([add_peer/1, peer_info/1, drop_peer/1, enum_peers/0]).
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
 
-%% echo pw | sudo -S cmd
-%% iptables / ip6tables
-
-
-
-
 start() -> start(normal, []).
+
+start(OptList) -> start(normal, OptList).
 
 start(normal, OptList) ->
     ntp_supervisor:start_link(OptList).
@@ -61,27 +57,34 @@ get_offset(_) ->
     {error, badarg}.
 
 
-add_peer(IP) when is_tuple(IP) ->
-    {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
-    gen_server:cast(ntp_sysproc, {add_peer, {IP, Pid}});
-add_peer(HostName) when is_list(HostName) ->
-    case Ret = inet:gethostbyname(HostName) of
-        {hostent, _, _, _, _, IPaddrs} ->
-               lists:foreach(fun(IP) ->
-                                {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
-                                gen_server:cast(ntp_sysproc, {add_peer, {HostName, IP, Pid}})
-                                end
-                            , IPaddrs);
-        {error, _} -> Ret
+add_peer({_,_,_,_} = IP) -> gen_server:call(ntp_sysproc, {add_peer, IP});
+add_peer({_,_,_,_,_,_,_,_} = IP) -> gen_server:call(ntp_sysproc, {add_peer, IP});
+add_peer(Host) ->
+    %% gethostbyname takes care of errors for return
+    case inet:gethostbyname(Host) of
+        {ok, {_,_,_,_,_,IPAddrs}} ->
+            gen_server:call(ntp_sysproc, {add_peer, IPAddrs});
+        Ret -> Ret
     end.
 
-drop_peer(Host) ->
-    gen_server:cast(ntp_sysproc, {drop_peer, Host}).
+drop_peer(Pid) ->
+    gen_server:cast(ntp_sysproc, {drop_peer, Pid}).
 
-peer_info(Host) ->
-    P = gen_server:call(ntp_sysproc, {peer_pid, Host}),
-    {_, Ret} = gen_server:call(P, {get_vars, all}),
-    Ret.
+peer_info(Pid) ->
+    try
+        {_, Ret} = gen_server:call(Pid, {get_vars, all}),
+        Ret
+    catch
+        _:_ -> {error, enotconn}
+    end.
+
+enum_peers() ->
+    Peers = supervisor:which_children(ntp_peer_supervisor),
+    lists:foldl(fun(E, Acc) ->
+            {_, Pid, _, _} = E,
+            [Pid | Acc]
+        end, [], Peers).
+
 
 %% ====================================================================
 %% Internal functions

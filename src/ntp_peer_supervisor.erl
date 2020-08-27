@@ -3,11 +3,12 @@
 
 -author("Nolan Robidoux").
 
--export([start_link/1, init/1]).
+-export([start_link/0, start_link/1, init/1]).
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
+start_link() -> start_link([]).
 
 start_link([]) ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, []).

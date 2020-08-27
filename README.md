@@ -11,8 +11,8 @@ This is a gen_server intended for use in a supervisor tree.
 ### Dependencies (Source included if applicable)
 
  - Linux-based OS.
- - [iface](https://github.com/robione-nr/erlang-utils/blob/master/iface.erl): Used to gather NIC information.
- - [mathx](https://github.com/robione-nr/erlang-utils/blob/master/mathx.erl): Extends math library with some statistical (and other) functions.
+ - [erlang-utils/iface](https://github.com/robione-nr/erlang-utils/blob/master/iface.erl): Used to gather NIC information.
+ - [erlang-utils/mathx](https://github.com/robione-nr/erlang-utils/blob/master/mathx.erl): Extends math library with some statistical (and other) functions.
 
 ### Usage:
 
@@ -42,21 +42,18 @@ This is a gen_server intended for use in a supervisor tree.
   - enum_peers/0: List of all active peer processes.
 
 ### References:
-
-[Network Time Protocol Version 4: Protocol and Algorithms Specification](https://tools.ietf.org/html/rfc5905)
-
-[Network Time Security for the Network Time Protocol](https://datatracker.ietf.org/doc/draft-ietf-ntp-using-nts-for-ntp/?include_text=1)
-
-[Network Time Protocol Version 4 (NTPv4) Extension Fields](https://tools.ietf.org/html/rfc7822)
+ - [RFC 5905: Network Time Protocol Version 4: Protocol and Algorithms Specification](https://tools.ietf.org/html/rfc5905)
+ - [DRAFT: Network Time Security for the Network Time Protocol](https://datatracker.ietf.org/doc/draft-ietf-ntp-using-nts-for-ntp/?include_text=1)
+ - [RFC 7822: Network Time Protocol Version 4 (NTPv4) Extension Fields](https://tools.ietf.org/html/rfc7822)
 
 ### Informative:
 
 #### Autokey
- - [Network Time Protocol Version 4: Autokey Specification](https://tools.ietf.org/html/rfc5906)
- - [Message Authentication Code for the Network Time Protocol](https://tools.ietf.org/html/rfc8573)
+ - [RFC 5906: Network Time Protocol Version 4: Autokey Specification](https://tools.ietf.org/html/rfc5906)
+ - [RFC 8573: Message Authentication Code for the Network Time Protocol](https://tools.ietf.org/html/rfc8573)
 
 #### UDP Checksums
- - [UDP Checksum Complement in the Network Time Protocol (NTP)](https://tools.ietf.org/html/rfc7821)
- - [Computation of the Internet Checksum via Incremental Update](https://tools.ietf.org/html/rfc1624)
- - [Incremental Updating of the Internet Checksum](https://tools.ietf.org/html/rfc1624)
- - [Computing the Internet Checksum](https://tools.ietf.org/html/rfc1071)
+ - [RFC 7821: UDP Checksum Complement in the Network Time Protocol (NTP)](https://tools.ietf.org/html/rfc7821)
+ - [RFC 1624: Computation of the Internet Checksum via Incremental Update](https://tools.ietf.org/html/rfc1624)
+ - [RFC 1141: Incremental Updating of the Internet Checksum](https://tools.ietf.org/html/rfc1141)
+ - [RFC 1071: Computing the Internet Checksum](https://tools.ietf.org/html/rfc1071)

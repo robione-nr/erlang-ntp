@@ -1,6 +1,6 @@
 {application, ntp, [
 	{description,"Erlang-based NTP Server"},
-	{vsn,"0.0.2"},
+	{vsn,"0.0.3"},
 
 	%List of modules added by this application
 	{modules, [ntp, ntp_supervisor, ntp_sysproc, ntp_peer_supervisor,

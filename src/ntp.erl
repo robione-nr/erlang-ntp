@@ -3,6 +3,8 @@
 
 -author("Nolan Robidoux").
 
+-include("../include/ntp.hrl").
+
 -compile(inline).
 
 -export([start/0, start/1, start/2, stop/1]).
@@ -25,7 +27,9 @@ start(normal, OptList) ->
     end,
     ntp_supervisor:start_link(OptList).
 
-stop(_) -> ok.
+stop(_) -> 
+    dets:close(?DETS_TABLE),
+    ok.
 
 %% ====================================================================
 %% API functions

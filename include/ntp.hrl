@@ -10,18 +10,36 @@
 -define(INIT_LEAP, 3).
 -define(INIT_STRATUM, 16).
 
--define(STRATUM_MIN, 2).
--define(STRATUM_MAX, 15).
+-define(MIN_STRATUM, 2).
+-define(MIN_POLL, 4).
 
--define(POLL_MIN, 4).
--define(POLL_MAX, 17).
--define(POLL_DEFAULT, 6).
+-define(MAX_STRATUM, 15).
+-define(MAX_POLL, 17).
+-define(MAX_DISP, 16).
 
--define(MODE_DEFAULT, client).
+-define(DEFAULT_POLL, 6).
+-define(DEFAULT_MODE, client).
+-define(DEFAULT_SAMPLES,50).
+-define(DEFAULT_CONFIG,"ntp.config").
 
--define(CLOCK_SAMPLES,50).
+-define(DETS_TABLE, ntp_config).
 
 -define(PHI, 15.0e-6).
 
 -define(NTP_SERVER_LIST, ["cronos.cenam.mx","time.esa.int","ntp.nict.jp","atom.uhr.de",
                           "clock.isc.org","ntp.ix.ru","tick.usask.ca","time.nist.gov"]).
+
+%% Change as needed
+-define(MS_SERVERS,{{'$1','_','_','_','_'},[],['$1']}).
+
+%% Function Macros =============================================
+%% TODO: Determine if binary best output
+%% Consider clamping on inputs to fractionalize
+-define(log2_frac(V), 1.0 / (1 bsl -(V))).     %% General
+-define(log2(V), 1 bsl V).
+
+-define(frac_u16(V), trunc(V * 65536)).        %% NTP Short
+-define(u16_frac(V), V / 65536).
+
+-define(frac_u32(V), trunc(V * 4294967296)).   %% NTP Long
+-define(u32_frac(V), V / 4294967296).

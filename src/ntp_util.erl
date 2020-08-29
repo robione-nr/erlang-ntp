@@ -4,6 +4,24 @@
 
 -export([clock_source/1, kod_string/1, is_kod/1]).
 -export([mode_to_atom/1, dispatch_policy/2]).
+-export([set_var/1, set_vars/1, get_vars/1, random/0]).
+
+-compile({inline,[set_var/1, set_vars/1, get_vars/1, random/0]}).
+
+%% App-wide Helpers: 1 spot vs. 5
+set_var({K,V}) -> put(K,V);
+set_var(K) when is_atom(K) -> put(K,0).
+
+set_vars(List) when is_list(List) ->
+    lists:foreach(fun set_var/1, List).
+
+get_vars(all) -> get();
+get_vars(V) when is_list(V) ->
+    lists:foldr(fun(VN, In) -> [get(VN) | In] end,[],V).
+
+random() ->
+    <<UInt:32/integer-unsigned>> = crypto:strong_rand_bytes(4),
+    UInt.
 
 %% STRATUM == 1 // Reference ID field
 clock_source(Code = <<_:4/binary>>) ->

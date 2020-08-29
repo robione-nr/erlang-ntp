@@ -10,15 +10,12 @@
 -export([start_link/1]).
 
 %% ====================================================================
-%% API functions
+%% Exposed functions
 %% ====================================================================
 -export([get_vars/1, set_vars/1]).
 
-get_vars(List) ->
-    gen_server:call(?MODULE, {get_vars, List}).
-
-set_vars(List) ->
-    gen_server:cast(?MODULE, {set_vars, List}).
+get_vars(List) ->           gen_server:call(?MODULE, {get_vars, List}).
+set_vars(List) ->           gen_server:call(?MODULE, {set_vars, List}).
 
 %% ====================================================================
 %% Behavioural functions
@@ -34,29 +31,44 @@ start_link(OptList) ->
 %% init/1
 %% ====================================================================
 init(OptList) when is_list(OptList) ->
-    application:start(crypto),
+    ntp_util:set_vars([t, precision, rtdelay, 
+                rtdisp, reftime, offset, jitter, flags, n]),
+
+    ntp_util:set_vars([{leap, ?INIT_LEAP}, {stratum, ?INIT_STRATUM},
+                {poll, ?DEFAULT_POLL}]),
+
+    put(precision, find_precision(proplists:get_value(sample_clock, OptList, ?DEFAULT_SAMPLES))),
+
+    put(refid, 
+        case (V = proplists:get_value(ref_id, OptList)) of
+            ipv4 -> refid(iface:to_binary(iface:get_ipv4()));
+            ipv6 -> refid(iface:to_binary(iface:get_ipv6()));
+            {_,_,_,_} -> refid(iface:to_binary(V));
+            {_,_,_,_,_,_,_,_} -> refid(iface:to_binary(V));
+            undefined -> refid(iface:to_binary(iface:get_ipv4()));
+            _ -> refid(iface:to_binary(iface:get_ipv4()))
+        end
+    ),
+
+    %% TODO: Intersection betweens DETS servers and list
+    %% Record: (Idea) host, mode
+    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
+    lists:foreach(fun ntp:add_peer/1, Servers),
+
+    %% m[] = [{int type, dbl, edge}]
+    %% f[] = [dbl metric]
     
-    Mode = proplists:get_value(mode, OptList, ?MODE_DEFAULT),
+    Mode = proplists:get_value(mode, OptList, ?DEFAULT_MODE),
     Password = proplists:get_value(sudo, OptList),
 
-    case {Password, Mode} of 
-        {undefined, Mode} when Mode =/= client ->
-            logger:log(notice, "No sudo password supplied. Cannot access port 123.\nRunning as client-only.");
-        _ -> continue
-    end,
-
-    RefID = case proplists:get_value(ref_id, OptList) of
-                ipv4 -> refid(iface:to_binary(iface:get_ipv4()));
-                ipv6 -> refid(iface:to_binary(iface:get_ipv6()));
-                {_,_,_,_} -> refid(iface:to_binary(iface:get_ipv4()));
-                {_,_,_,_,_,_,_,_} -> refid(iface:to_binary(iface:get_ipv6()));
-                undefined -> refid(iface:to_binary(iface:get_ipv4()));
-                _ -> error(badarg)
-            end,
-
-    Servers = proplists:get_value(servers, OptList, ?NTP_SERVER_LIST),
+    RunLevel = 
+        case {Password, Mode} of 
+            {undefined, Mode} when Mode =/= client ->
+                logger:log(notice, "No sudo password supplied. Cannot access port 123.\nRunning as client-only."),
+                client;
+            _ -> Mode
+        end,
     
-    Precision =  find_precision(proplists:get_value(sample_clock, OptList, ?CLOCK_SAMPLES)),
     Port = proplists:get_value(port, OptList, ?FW_PORT),
 
     
@@ -68,22 +80,11 @@ init(OptList) when is_list(OptList) ->
 
 %% handle_call/3
 %% ====================================================================
-handle_call({get_vars, Vars},_,State) ->
-    Result = if
-                Vars =:= all -> get();
-                true ->
-                    lists:foldr(fun(VN, In) ->
-                        [get(VN) | In]
-                        end
-                    ,[],Vars)
-            end,
-    {reply, {ok, Result}, State};
+handle_call({get_vars, V},_,State) ->   {reply, ntp_util:get_vars(V), State};
+handle_call({set_vars, V},_,State) ->   ntp_util:set_vars(V), {noreply, State};
 
-handle_call(get_time,_,State) ->
-    {reply, ok, State};
-
-handle_call(get_offset,_,State) ->
-    {reply, ok, State};
+handle_call(get_time,_,State) ->        {reply, get(t), State};
+handle_call(get_offset,_,State) ->      {reply, get(offset), State};
 
 handle_call({add_peer, IP}, _, {Map , Port}) when is_tuple(IP) ->
     {ok, Pid} = supervisor:start_child(ntp_peer_supervisor, [IP]),
@@ -118,13 +119,6 @@ handle_call(_,_,State) ->
 
 %% handle_cast/2
 %% ====================================================================
-handle_cast({set_vars, Vars}, State) ->
-    lists:foldl(fun({K,V}, _) ->
-                    put(K,V)
-                    end
-                , [], Vars),
-    {noreply, State};
-
 handle_cast({drop_peer, Pid}, {Map , Port}) ->
     demonitor(Pid),
     IP = maps:get(Pid, Map, undefined),
@@ -224,7 +218,7 @@ sample_clock(N, In) ->
 %% Test Zone
 
 poll_update(N) ->
-    Poll = max(min(?POLL_MAX,N),?POLL_MIN).
+    Poll = max(min(?MAX_POLL,N),?MIN_POLL).
 
 %% === "Kernel"
 %% Erlang: Do nothing (store offset if different beforehand)
@@ -267,13 +261,38 @@ gettime() -> %%ntp_time() :)
 %%      IPSrc. IPDst, version, hmode (host), keyid, flags 
 %%      /set by RxPacket
 %%      ntp_hdr
-%%      3ts /begin clear block
+%%      3ts /begin clear block ***********
 %%      /computed
 %%      t, f[n], ofset, delay, disp, jitter
 %%      /poll data
 %%      hpoll, burst, reach, ttl
-%%      unreach /end clear block
+%%      unreach /end clear block  ***********
 %%      outdate, nextdate / lastor next poll times; latter Erlang timer ref
+
+%%================================================
+%%               NOTES ---- TODO
+%%================================================
+%%initialize system structure
+%%initialize clock structure
+%%load persistent configs (assoc, freq file)
+%%place map in ETS table
+%%
+%%mobilize starts peer process and clears appropriate data
+%%      - peer process startup
+%%
+%%find_assoc -> during receive(), 
+%%      - refers to sysproc to lookup essentially same as access()
+%%
+%%time conversion routines: ntp <-> native
+%%
+%%DSCRD exits, ERR closes sym_connect -> exits
+%%      exits == in erlang??
+%%
+%%iface:is_bcast - get from getifaddrs
+%%iface:is_multicast - ipv4 & 1110_ _ _ _
+%%                  ipv6 & ff00 == ff00
+%%================================================
+%%================================================
 
 %% System S = {
 %%      t //timestamp
